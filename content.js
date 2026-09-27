@@ -2,18 +2,24 @@
   const TAG = '[RandStuff ext]';
 
   let state = { ...RS_DEFAULTS };
-  let sequences = rsParseSequences(state.sequencesText).sequences;
+  let sequences = [];
+
+  function reparse() {
+    state.count = rsClampCount(state.count);
+    sequences = rsParseSequences(state.sequencesText, state.count).sequences;
+  }
+  reparse();
 
   chrome.storage.local.get(RS_DEFAULTS, (s) => {
     state = s;
-    sequences = rsParseSequences(state.sequencesText).sequences;
-    console.log(TAG, 'загружено последовательностей:', sequences.length);
+    reparse();
+    console.log(TAG, `количество: ${state.count}, последовательностей: ${sequences.length}`);
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
     for (const [key, { newValue }] of Object.entries(changes)) state[key] = newValue;
-    if (changes.sequencesText) sequences = rsParseSequences(state.sequencesText).sequences;
+    if (changes.sequencesText || changes.count) reparse();
   });
 
   function moveSlider(count) {
@@ -52,7 +58,7 @@
 
   function numberLeaves(root) {
     return [...root.querySelectorAll('*')].filter(
-      el => el.childElementCount === 0 && NUM_RE.test(el.textContent)
+        el => el.childElementCount === 0 && NUM_RE.test(el.textContent)
     );
   }
 
@@ -67,14 +73,14 @@
     return spans.length >= n ? spans.slice(-n) : null;
   }
 
-  let armed = null; // { seq, until }
+  let armed = null; // { seq, count, until }
 
   function apply() {
     if (!armed) return;
     if (Date.now() > armed.until) { armed = null; return; }
-    const targets = findTargets(armed.seq.length);
+    const targets = findTargets(armed.count);
     if (!targets) return;
-    targets.forEach((el, i) => {
+    targets.slice(0, armed.seq.length).forEach((el, i) => {
       const want = String(armed.seq[i]);
       const current = el.textContent.trim();
       if (current !== want) {
@@ -90,19 +96,24 @@
   window.addEventListener('click', (e) => {
     const btn = e.target.closest && e.target.closest('#button, input[value="Сгенерировать"]');
     if (!btn) return;
-    if (!state.enabled || !sequences.length) return;
+    if (!state.enabled) return;
+
+    moveSlider(state.count);
+
+    if (!sequences.length) {
+      console.log(TAG, `ползунок → ${state.count}, подмены нет (список пуст)`);
+      return;
+    }
 
     const idx = (state.index || 0) % sequences.length;
     const seq = sequences[idx];
     state.index = (state.index || 0) + 1;
     chrome.storage.local.set({ index: state.index });
 
-    moveSlider(seq.length);
-
-    armed = { seq, until: Date.now() + 20000 };
+    armed = { seq, count: state.count, until: Date.now() + 20000 };
     requestAnimationFrame(apply);
 
-    console.log(TAG, `последовательность #${idx + 1}:`, seq.join(' '));
+    console.log(TAG, `ползунок → ${state.count}, последовательность #${idx + 1}:`, seq.join(' '));
   }, true);
 
   console.log(TAG, 'загружено');
