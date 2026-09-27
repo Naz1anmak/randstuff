@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>RandStuff</title>
+<style>
+  :root {
+    --bg: #5e5e5e;
+    --panel: #4d4d4d;
+    --text: #f1efe9;
+    --muted: #c9c5bc;
+    --btn-top: #ffd23a;
+    --btn-bottom: #ff9900;
+    --btn-text: #5a2d00;
+    --error: #ffb4a6;
+    --ok: #c8f0a8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    width: 320px;
+    padding: 16px;
+    font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,.03) 0 2px, transparent 2px 4px),
+      var(--bg);
+  }
+  h1 { margin: 0 0 4px; font-size: 20px; font-weight: 400; }
+  p.hint { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    resize: vertical;
+    padding: 8px 10px;
+    border: 1px solid #3c3c3c;
+    border-radius: 4px;
+    background: var(--panel);
+    color: var(--text);
+    font: 15px/1.6 Consolas, "Courier New", monospace;
+  }
+  textarea:focus-visible, button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--btn-top);
+    outline-offset: 2px;
+  }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  label.toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .save {
+    width: 100%;
+    margin-top: 12px;
+    padding: 9px 0;
+    border: 1px solid #c27000;
+    border-radius: 6px;
+    background: linear-gradient(var(--btn-top), var(--btn-bottom));
+    color: var(--btn-text);
+    font: italic 700 18px/1 Georgia, "Times New Roman", serif;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 0 #a85f00;
+  }
+  .save:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.5); }
+  .link {
+    margin-left: auto;
+    background: none; border: 0; padding: 0;
+    color: var(--muted); text-decoration: underline; cursor: pointer; font: inherit; font-size: 12.5px;
+  }
+  #status { min-height: 1.4em; margin-top: 8px; font-size: 12.5px; }
+  #status.ok { color: var(--ok); }
+  #status.err { color: var(--error); white-space: pre-line; }
+  #next { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
+  #next b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>Какие числа выпадут</h1>
+  <p class="hint">Одна строка — одно нажатие «Сгенерировать». Числа через пробел или запятую. Строки идут по кругу. Ползунок встанет на количество чисел в строке.</p>
+
+  <textarea id="seq" spellcheck="false" aria-label="Последовательности"></textarea>
+
+  <div class="row">
+    <label class="toggle"><input type="checkbox" id="enabled"> Подменять результат</label>
+    <button class="link" id="reset" type="button">Начать с первой строки</button>
+  </div>
+
+  <button class="save" id="save" type="button">Сохранить</button>
+  <div id="status" role="status"></div>
+  <div id="next"></div>
+
+  <script src="shared.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
