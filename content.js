@@ -6,6 +6,7 @@
 
   function reparse() {
     state.count = rsClampCount(state.count);
+    // Строки с ошибками парсер отбрасывает, валидные остаются
     sequences = rsParseSequences(state.sequencesText, state.count).sequences;
   }
   reparse();
@@ -54,23 +55,39 @@
     return true;
   }
 
-  const NUM_RE = /^\s*-?\d+\s*$/;
+  function collectNumbers(root) {
+    const nodes = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
 
-  function numberLeaves(root) {
-    return [...root.querySelectorAll('*')].filter(
-        el => el.childElementCount === 0 && NUM_RE.test(el.textContent)
-    );
+    const starts = [];
+    const lengths = [];
+    let full = '';
+    for (const n of nodes) {
+      starts.push(full.length);
+      lengths.push(n.data.length);
+      full += n.data;
+    }
+
+    const matches = [];
+    const re = /-?\d+/g;
+    for (let m = re.exec(full); m; m = re.exec(full)) {
+      matches.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+    }
+    return { nodes, starts, lengths, matches };
   }
 
-  function findTargets(n) {
-    const box = document.getElementById('number');
-    if (box) {
-      if (n === 1 && box.childElementCount === 0 && NUM_RE.test(box.textContent)) return [box];
-      const inside = numberLeaves(box);
-      if (inside.length >= n) return inside.slice(-n);
-    }
-    const spans = [...document.querySelectorAll('span')].filter(s => NUM_RE.test(s.textContent));
-    return spans.length >= n ? spans.slice(-n) : null;
+  function writeNumber(info, match, value) {
+    let first = true;
+    info.nodes.forEach((node, k) => {
+      const s = info.starts[k];
+      const e = s + info.lengths[k];
+      if (e <= match.start || s >= match.end) return; // узел не относится к числу
+      const a = Math.max(s, match.start) - s;
+      const b = Math.min(e, match.end) - s;
+      node.data = node.data.slice(0, a) + (first ? value : '') + node.data.slice(b);
+      first = false;
+    });
   }
 
   let armed = null; // { seq, count, until }
@@ -78,15 +95,28 @@
   function apply() {
     if (!armed) return;
     if (Date.now() > armed.until) { armed = null; return; }
-    const targets = findTargets(armed.count);
-    if (!targets) return;
-    targets.slice(0, armed.seq.length).forEach((el, i) => {
+
+    const box = document.getElementById('number');
+    if (!box) return applyFallback();
+
+    const info = collectNumbers(box);
+    // Если чисел в блоке больше, чем генерируется, берём последние count
+    const offset = Math.max(0, info.matches.length - armed.count);
+    const ours = info.matches.slice(offset, offset + armed.seq.length);
+
+    for (let i = ours.length - 1; i >= 0; i--) {
       const want = String(armed.seq[i]);
-      const current = el.textContent.trim();
-      if (current !== want) {
-        // Меняем только само число, пробелы вокруг сохраняем
-        el.textContent = el.textContent.replace(/-?\d+/, want);
-      }
+      if (ours[i].text !== want) writeNumber(info, ours[i], want);
+    }
+  }
+
+  function applyFallback() {
+    const spans = [...document.querySelectorAll('span')]
+        .filter(s => /^\s*-?\d+\s*$/.test(s.textContent));
+    if (spans.length < armed.count) return;
+    spans.slice(-armed.count).slice(0, armed.seq.length).forEach((el, i) => {
+      const want = String(armed.seq[i]);
+      if (el.textContent.trim() !== want) el.textContent = el.textContent.replace(/-?\d+/, want);
     });
   }
 
@@ -96,8 +126,9 @@
   window.addEventListener('click', (e) => {
     const btn = e.target.closest && e.target.closest('#button, input[value="Сгенерировать"]');
     if (!btn) return;
-    if (!state.enabled) return;
+    if (!state.enabled) return; // сайт работает как обычно
 
+    // Ползунок ставим всегда (даже при пустом списке — тогда числа будут настоящими)
     moveSlider(state.count);
 
     if (!sequences.length) {
