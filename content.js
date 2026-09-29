@@ -21,6 +21,8 @@
     if (area !== 'local') return;
     for (const [key, { newValue }] of Object.entries(changes)) state[key] = newValue;
     if (changes.sequencesText || changes.count) reparse();
+    // Выключили — снимаем подмену, иначе она ещё до 20 с держит прошлое число
+    if (changes.enabled && !changes.enabled.newValue) armed = null;
   });
 
   function moveSlider(count) {
@@ -126,6 +128,7 @@
   window.addEventListener('click', (e) => {
     const btn = e.target.closest && e.target.closest('#button, input[value="Сгенерировать"]');
     if (!btn) return;
+    armed = null; // прошлая подмена не должна перекрывать новую генерацию
     if (!state.enabled) return; // сайт работает как обычно
 
     // Ползунок ставим всегда (даже при пустом списке — тогда числа будут настоящими)
@@ -133,6 +136,11 @@
 
     if (!sequences.length) {
       console.log(TAG, `ползунок → ${state.count}, подмены нет (список пуст)`);
+      return;
+    }
+
+    if (!state.loop && (state.index || 0) >= sequences.length) {
+      console.log(TAG, `ползунок → ${state.count}, список закончился — числа настоящие`);
       return;
     }
 
@@ -145,6 +153,14 @@
     requestAnimationFrame(apply);
 
     console.log(TAG, `ползунок → ${state.count}, последовательность #${idx + 1}:`, seq.join(' '));
+  }, true);
+
+  // Горячая клавиша вкл/выкл: onChanged выше обновит state и снимет подмену
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat || !rsHotkeyMatches(e, state.hotkey || rsDefaultHotkey())) return;
+    e.preventDefault();
+    chrome.storage.local.set({ enabled: !state.enabled });
+    console.log(TAG, state.enabled ? 'подмена выключена' : 'подмена включена');
   }, true);
 
   console.log(TAG, 'загружено');

@@ -3,7 +3,8 @@ const $count = document.getElementById('count');
 const $countWord = document.getElementById('countWord');
 const $minus = document.getElementById('minus');
 const $plus = document.getElementById('plus');
-const $enabled = document.getElementById('enabled');
+const $loop = document.getElementById('loop');
+const $hotkeyField = document.getElementById('hotkeyField');
 const $save = document.getElementById('save');
 const $reset = document.getElementById('reset');
 const $status = document.getElementById('status');
@@ -11,6 +12,9 @@ const $next = document.getElementById('next');
 
 let saved = { text: '', count: RS_DEFAULTS.count };
 let currentIndex = 0;
+let loop = RS_DEFAULTS.loop;
+let hotkey = rsDefaultHotkey();
+let recording = false;
 
 function setStatus(text, kind) {
   $status.textContent = text;
@@ -36,6 +40,10 @@ function renderNext() {
     $next.textContent = `Список пуст — ползунок встанет на ${saved.count}, числа будут настоящими.`;
     return;
   }
+  if (!loop && currentIndex >= sequences.length) {
+    $next.textContent = 'Список закончился — дальше числа будут настоящими.';
+    return;
+  }
   const i = currentIndex % sequences.length;
   const seq = sequences[i];
   const b = document.createElement('b');
@@ -49,10 +57,55 @@ chrome.storage.local.get(RS_DEFAULTS, (s) => {
   currentIndex = s.index || 0;
   $seq.value = s.sequencesText;
   $count.value = saved.count;
-  $enabled.checked = s.enabled;
+  loop = $loop.checked = s.loop;
+  hotkey = s.hotkey || rsDefaultHotkey();
+  $hotkeyField.textContent = rsHotkeyLabel(hotkey);
   syncCountWord();
   renderNext();
 });
+
+// Изменения извне: хоткей, нажатия «Сгенерировать» при открытом попапе
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (changes.enabled) {
+    setStatus(changes.enabled.newValue ? 'Подмена включена' : 'Подмена выключена — сайт работает как обычно', 'ok');
+  }
+  if (changes.index) {
+    currentIndex = changes.index.newValue || 0;
+    renderNext();
+  }
+});
+
+// Поле хоткея: клик — ждём сочетание, Esc или клик мимо — отмена
+function stopRecording() {
+  recording = false;
+  $hotkeyField.classList.remove('recording');
+  $hotkeyField.textContent = rsHotkeyLabel(hotkey);
+}
+$hotkeyField.addEventListener('click', () => {
+  if (recording) return stopRecording();
+  recording = true;
+  $hotkeyField.classList.add('recording');
+  $hotkeyField.textContent = 'Нажмите сочетание…';
+});
+$hotkeyField.addEventListener('blur', () => { if (recording) stopRecording(); });
+document.addEventListener('keydown', (e) => {
+  if (!recording) return;
+  e.preventDefault();
+  e.stopImmediatePropagation(); // не даём сработать Ctrl+Enter и прочему
+  if (e.key === 'Escape') return stopRecording();
+  const h = rsHotkeyFromEvent(e);
+  if (!h) {
+    if (!['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+      setStatus(`Нужен модификатор: ${RS_IS_MAC ? '⌘, ⌥ или ⌃' : 'Ctrl или Alt'}`, 'err');
+    }
+    return;
+  }
+  hotkey = h;
+  chrome.storage.local.set({ hotkey });
+  stopRecording();
+  setStatus(`Сочетание сохранено: ${rsHotkeyLabel(hotkey)} (работает на странице RandStuff)`, 'ok');
+}, true);
 
 function stepCount(delta) {
   $count.value = rsClampCount(($count.value || saved.count) * 1 + delta);
@@ -87,9 +140,11 @@ $save.addEventListener('click', () => {
   });
 });
 
-$enabled.addEventListener('change', () => {
-  chrome.storage.local.set({ enabled: $enabled.checked });
-  setStatus($enabled.checked ? 'Расширение включено' : 'Расширение выключено — сайт работает как обычно', 'ok');
+$loop.addEventListener('change', () => {
+  loop = $loop.checked;
+  chrome.storage.local.set({ loop });
+  setStatus(loop ? 'Список будет повторяться по кругу' : 'После последней строки числа будут настоящими', 'ok');
+  renderNext();
 });
 
 $reset.addEventListener('click', () => {

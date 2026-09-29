@@ -68,6 +68,15 @@
     #status.err { color: var(--error); white-space: pre-line; }
     #next { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
     #next b { color: var(--text); font-weight: 600; }
+    #hotkey { font-size: 12.5px; color: var(--muted); }
+    #hotkeyField {
+      margin-left: auto; min-width: 110px; padding: 4px 8px;
+      border: 1px solid #3c3c3c; border-radius: 4px;
+      background: var(--panel); color: var(--text);
+      font: 600 13px/1.2 "Segoe UI", system-ui, sans-serif; cursor: pointer;
+    }
+    #hotkeyField:hover { background: #454545; }
+    #hotkeyField.recording { border-color: var(--btn-top); color: var(--btn-top); font-weight: 400; }
     .count { display: flex; align-items: center; gap: 6px; margin: 10px 0 8px; }
     .count label { margin-right: 2px; }
     .count input {
@@ -97,13 +106,17 @@
   <span id="countWord">чисел</span>
 </div>
 
-<p class="hint">Одна строка — одно нажатие «Сгенерировать», строки идут по кругу. Числа через пробел или запятую. Если в строке чисел меньше, чем генерируется, подменятся только первые, остальные останутся настоящими.</p>
+<p class="hint">Одна строка — одно нажатие «Сгенерировать», строки идут по порядку. Числа через пробел или запятую. Если в строке чисел меньше, чем генерируется, подменятся только первые, остальные останутся настоящими.</p>
 
 <textarea id="seq" spellcheck="false" aria-label="Последовательности"></textarea>
 
 <div class="row">
-  <label class="toggle"><input type="checkbox" id="enabled"> Расширение включено</label>
+  <label class="toggle"><input type="checkbox" id="loop"> Повторять по кругу</label>
   <button class="link" id="reset" type="button">Начать с первой строки</button>
+</div>
+<div class="row" id="hotkey">
+  <label for="hotkeyField">Вкл/выкл подмены:</label>
+  <button type="button" id="hotkeyField" title="Нажмите, затем введите своё сочетание">—</button>
 </div>
 
 <button class="save" id="save" type="button">Сохранить</button>
