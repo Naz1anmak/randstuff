@@ -9,12 +9,15 @@ const $save = document.getElementById('save');
 const $reset = document.getElementById('reset');
 const $status = document.getElementById('status');
 const $next = document.getElementById('next');
+const $gutter = document.getElementById('gutterLines');
 
 let saved = { text: '', count: RS_DEFAULTS.count };
 let currentIndex = 0;
 let loop = RS_DEFAULTS.loop;
 let hotkey = rsDefaultHotkey();
 let recording = false;
+let siteLimits = null;
+let curLine = -1; // строка поля, числа из которой сейчас на сайте
 
 function setStatus(text, kind) {
   $status.textContent = text;
@@ -33,23 +36,44 @@ function syncCountWord() {
   $countWord.textContent = plural(n, 'число', 'числа', 'чисел');
 }
 
+function renderGutter() {
+  const count = $seq.value.split('\n').length;
+  // Пока список правят и не сохранили, подсветка указывала бы не туда — убираем
+  const hl = $seq.value === saved.text ? curLine : -1;
+  let html = '';
+  for (let i = 0; i < count; i++) html += `<div${i === hl ? ' class="cur"' : ''}>${i + 1}</div>`;
+  $gutter.innerHTML = html;
+  syncGutterScroll();
+}
+function syncGutterScroll() {
+  $gutter.style.transform = `translateY(${-$seq.scrollTop}px)`;
+}
+$seq.addEventListener('input', renderGutter);
+$seq.addEventListener('scroll', syncGutterScroll);
+
 function renderNext() {
-  const { sequences } = rsParseSequences(saved.text, saved.count);
+  const { sequences, lines } = rsParseSequences(saved.text, saved.count);
   $next.innerHTML = '';
+  const listOver = !loop && currentIndex > sequences.length;
+  curLine = currentIndex > 0 && sequences.length && !listOver
+      ? lines[(currentIndex - 1) % sequences.length] : -1;
   if (!sequences.length) {
     $next.textContent = `Список пуст — ползунок встанет на ${saved.count}, числа будут настоящими.`;
-    return;
+    return renderGutter();
   }
   if (!loop && currentIndex >= sequences.length) {
     $next.textContent = 'Список закончился — дальше числа будут настоящими.';
-    return;
+    return renderGutter();
   }
   const i = currentIndex % sequences.length;
+  const nextLine = lines[i];
+  renderGutter();
   const seq = sequences[i];
   const b = document.createElement('b');
   const rest = saved.count - seq.length;
-  b.textContent = seq.join(' ') + (rest > 0 ? ' ' + Array(rest).fill('?').join(' ') : '');
-  $next.append('Следующим нажатием: ', b, ` (строка ${i + 1} из ${sequences.length})`);
+  const shown = seq.map(v => (rsViolation(v, siteLimits) ? '?' : v));
+  b.textContent = shown.join(' ') + (rest > 0 ? ' ' + Array(rest).fill('?').join(' ') : '');
+  $next.append('Следующим нажатием: ', b, ` (строка ${nextLine + 1})`);
 }
 
 chrome.storage.local.get(RS_DEFAULTS, (s) => {
@@ -59,24 +83,22 @@ chrome.storage.local.get(RS_DEFAULTS, (s) => {
   $count.value = saved.count;
   loop = $loop.checked = s.loop;
   hotkey = s.hotkey || rsDefaultHotkey();
+  siteLimits = s.siteLimits || null;
   $hotkeyField.textContent = rsHotkeyLabel(hotkey);
   syncCountWord();
   renderNext();
 });
 
-// Изменения извне: хоткей, нажатия «Сгенерировать» при открытом попапе
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.enabled) {
     setStatus(changes.enabled.newValue ? 'Подмена включена' : 'Подмена выключена — сайт работает как обычно', 'ok');
   }
-  if (changes.index) {
-    currentIndex = changes.index.newValue || 0;
-    renderNext();
-  }
+  if (changes.siteLimits) siteLimits = changes.siteLimits.newValue || null;
+  if (changes.index) currentIndex = changes.index.newValue || 0;
+  if (changes.index || changes.siteLimits) renderNext();
 });
 
-// Поле хоткея: клик — ждём сочетание, Esc или клик мимо — отмена
 function stopRecording() {
   recording = false;
   $hotkeyField.classList.remove('recording');
@@ -86,13 +108,13 @@ $hotkeyField.addEventListener('click', () => {
   if (recording) return stopRecording();
   recording = true;
   $hotkeyField.classList.add('recording');
-  $hotkeyField.textContent = 'Нажмите сочетание…';
+  $hotkeyField.textContent = 'Нажмите…';
 });
 $hotkeyField.addEventListener('blur', () => { if (recording) stopRecording(); });
 document.addEventListener('keydown', (e) => {
   if (!recording) return;
   e.preventDefault();
-  e.stopImmediatePropagation(); // не даём сработать Ctrl+Enter и прочему
+  e.stopImmediatePropagation(); // не даём сработать Ctrl+Enter
   if (e.key === 'Escape') return stopRecording();
   const h = rsHotkeyFromEvent(e);
   if (!h) {

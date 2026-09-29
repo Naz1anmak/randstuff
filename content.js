@@ -21,7 +21,7 @@
     if (area !== 'local') return;
     for (const [key, { newValue }] of Object.entries(changes)) state[key] = newValue;
     if (changes.sequencesText || changes.count) reparse();
-    // Выключили — снимаем подмену, иначе она ещё до 20 с держит прошлое число
+    // иначе подмена ещё до 20 с держит прошлое число
     if (changes.enabled && !changes.enabled.newValue) armed = null;
   });
 
@@ -92,7 +92,30 @@
     });
   }
 
-  let armed = null; // { seq, count, until }
+  function readLimits() {
+    const val = id => (document.getElementById(id) || {}).value || '';
+    const excludeBox = document.querySelector('#number-exclude input[type=checkbox]');
+    const exclude = excludeBox && excludeBox.checked ? rsParseInts(val('number-exclude-list')) : [];
+    const listMode = document.querySelector('input[name=from][value=list]');
+    if (listMode && listMode.checked) return { mode: 'list', list: rsParseInts(val('number-list')), exclude };
+    const [min] = rsParseInts(val('number-start'));
+    const [max] = rsParseInts(val('number-end'));
+    if (min === undefined || max === undefined || min > max) return { mode: 'any', exclude };
+    return { mode: 'range', min, max, exclude };
+  }
+
+  let lastLimits = '';
+  function publishLimits() {
+    const json = JSON.stringify(readLimits());
+    if (json === lastLimits) return;
+    lastLimits = json;
+    chrome.storage.local.set({ siteLimits: JSON.parse(json) });
+  }
+  publishLimits();
+  document.addEventListener('input', publishLimits, true);
+  document.addEventListener('change', publishLimits, true);
+
+  let armed = null; // { seq, count, until }; null в seq — число не подменяем
 
   function apply() {
     if (!armed) return;
@@ -107,6 +130,7 @@
     const ours = info.matches.slice(offset, offset + armed.seq.length);
 
     for (let i = ours.length - 1; i >= 0; i--) {
+      if (armed.seq[i] === null) continue;
       const want = String(armed.seq[i]);
       if (ours[i].text !== want) writeNumber(info, ours[i], want);
     }
@@ -117,6 +141,7 @@
         .filter(s => /^\s*-?\d+\s*$/.test(s.textContent));
     if (spans.length < armed.count) return;
     spans.slice(-armed.count).slice(0, armed.seq.length).forEach((el, i) => {
+      if (armed.seq[i] === null) return;
       const want = String(armed.seq[i]);
       if (el.textContent.trim() !== want) el.textContent = el.textContent.replace(/-?\d+/, want);
     });
@@ -128,7 +153,7 @@
   window.addEventListener('click', (e) => {
     const btn = e.target.closest && e.target.closest('#button, input[value="Сгенерировать"]');
     if (!btn) return;
-    armed = null; // прошлая подмена не должна перекрывать новую генерацию
+    armed = null;
     if (!state.enabled) return; // сайт работает как обычно
 
     // Ползунок ставим всегда (даже при пустом списке — тогда числа будут настоящими)
@@ -140,22 +165,28 @@
     }
 
     if (!state.loop && (state.index || 0) >= sequences.length) {
+      // index > длины списка — знак для попапа, что на сайте уже настоящее число
+      if (state.index === sequences.length) chrome.storage.local.set({ index: state.index + 1 });
       console.log(TAG, `ползунок → ${state.count}, список закончился — числа настоящие`);
       return;
     }
 
     const idx = (state.index || 0) % sequences.length;
-    const seq = sequences[idx];
+    const limits = readLimits();
+    const seq = sequences[idx].map(v => (rsViolation(v, limits) ? null : v));
     state.index = (state.index || 0) + 1;
     chrome.storage.local.set({ index: state.index });
 
     armed = { seq, count: state.count, until: Date.now() + 20000 };
     requestAnimationFrame(apply);
 
-    console.log(TAG, `ползунок → ${state.count}, последовательность #${idx + 1}:`, seq.join(' '));
+    console.log(TAG, `ползунок → ${state.count}, последовательность #${idx + 1}:`, seq.map(v => v ?? '?').join(' '));
+    sequences[idx].forEach((v) => {
+      const why = rsViolation(v, limits);
+      if (why) console.warn(TAG, `${v} ${why} — оставлено настоящее число`);
+    });
   }, true);
 
-  // Горячая клавиша вкл/выкл: onChanged выше обновит state и снимет подмену
   window.addEventListener('keydown', (e) => {
     if (e.repeat || !rsHotkeyMatches(e, state.hotkey || rsDefaultHotkey())) return;
     e.preventDefault();

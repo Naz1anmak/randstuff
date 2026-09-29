@@ -1,10 +1,11 @@
 const RS_DEFAULTS = {
   enabled: true,
-  loop: true, // false — после последней строки числа настоящие
+  loop: true,
   count: 5,
   sequencesText: '1 2 3 4 5\n2 3 4 4 5',
   index: 0,
-  hotkey: null // null — сочетание по умолчанию для текущей ОС
+  hotkey: null, // null — по умолчанию для текущей ОС
+  siteLimits: null
 };
 
 const RS_MIN_COUNT = 1;
@@ -18,6 +19,7 @@ function rsClampCount(n) {
 
 function rsParseSequences(text, count) {
   const sequences = [];
+  const lines = [];
   const errors = [];
   (text || '').split(/\r?\n/).forEach((rawLine, i) => {
     const line = rawLine.trim();
@@ -33,13 +35,25 @@ function rsParseSequences(text, count) {
       return;
     }
     sequences.push(tokens.map(Number));
+    lines.push(i);
   });
-  return { sequences, errors };
+  return { sequences, lines, errors };
 }
 
-// --- Горячая клавиша вкл/выкл подмены ---
-// Храним { code, ctrl, alt, shift, meta }. code — физическая клавиша (KeyY),
-// поэтому сочетание работает и в русской раскладке.
+function rsParseInts(text) {
+  return (String(text || '').match(/-?\d+/g) || []).map(Number);
+}
+
+// limits: { mode: 'range', min, max, exclude } | { mode: 'list', list, exclude } | { mode: 'any', exclude }
+function rsViolation(v, limits) {
+  if (!limits) return '';
+  if (limits.exclude.includes(v)) return 'в списке исключений';
+  if (limits.mode === 'list') {
+    return limits.list.length && !limits.list.includes(v) ? 'нет в списке сайта' : '';
+  }
+  if (limits.mode !== 'range') return '';
+  return v < limits.min || v > limits.max ? `вне диапазона ${limits.min}–${limits.max}` : '';
+}
 
 const RS_IS_MAC = /mac/i.test(navigator.userAgentData?.platform || navigator.platform || '');
 
@@ -49,8 +63,9 @@ function rsDefaultHotkey() {
       : { code: 'KeyY', ctrl: true, alt: false, shift: true, meta: false };
 }
 
+// code — физическая клавиша (KeyY), поэтому сочетание работает и в русской раскладке
 function rsHotkeyFromEvent(e) {
-  if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return null; // нажат только модификатор
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return null;
   if (!e.ctrlKey && !e.altKey && !e.metaKey) return null; // без модификатора мешало бы вводу
   return { code: e.code, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey };
 }

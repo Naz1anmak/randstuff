@@ -1,6 +1,3 @@
-// Значок OFF на иконке, пока подмена выключена.
-// Саму горячую клавишу слушает content.js на странице RandStuff.
-
 function updateBadge(enabled) {
   chrome.action.setBadgeText({ text: enabled ? '' : 'OFF' });
   chrome.action.setBadgeBackgroundColor({ color: '#888' });

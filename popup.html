@@ -28,23 +28,59 @@
     }
     h1 { margin: 0 0 4px; font-size: 20px; font-weight: 400; }
     p.hint { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
-    textarea {
-      width: 100%;
-      min-height: 140px;
-      resize: vertical;
-      padding: 8px 10px;
+    .editor {
+      display: flex;
       border: 1px solid #3c3c3c;
       border-radius: 4px;
       background: var(--panel);
-      color: var(--text);
-      font: 15px/1.6 Consolas, "Courier New", monospace;
     }
-    textarea:focus-visible, button:focus-visible, input:focus-visible {
+    .editor:focus-within { outline: 2px solid var(--btn-top); outline-offset: 2px; }
+    .editor textarea { font: 15px/1.6 Consolas, "Courier New", monospace; }
+    /* Номера абсолютно, чтобы не растягивать поле */
+    .gutter {
+      flex: none; width: 32px; position: relative;
+      overflow: hidden; user-select: none;
+      border-right: 1px solid #454545;
+    }
+    #gutterLines {
+      position: absolute; top: 0; left: 0; right: 6px;
+      padding-top: 8px; text-align: right;
+      color: #7c7c7c; font: 12px/24px Consolas, "Courier New", monospace; /* 24px = 15px × 1.6, в шаг со строками */
+    }
+    #gutterLines .cur { color: var(--btn-top); }
+    textarea {
+      flex: 1; min-width: 0;
+      min-height: 140px;
+      resize: vertical;
+      padding: 8px 10px;
+      border: 0;
+      border-radius: 0 4px 4px 0;
+      background: transparent;
+      color: var(--text);
+      white-space: pre;
+      outline: none;
+    }
+    textarea { scrollbar-color: #7a7a7a var(--panel); }
+    textarea::-webkit-scrollbar { width: 10px; }
+    textarea::-webkit-scrollbar-track { background: var(--panel); border-radius: 0 4px 4px 0; }
+    textarea::-webkit-scrollbar-thumb { background: #6e6e6e; border-radius: 5px; border: 2px solid var(--panel); }
+    textarea::-webkit-scrollbar-thumb:hover { background: #858585; }
+    textarea::-webkit-scrollbar-corner, textarea::-webkit-resizer { background: var(--panel); }
+    button:focus-visible, input:focus-visible {
       outline: 2px solid var(--btn-top);
       outline-offset: 2px;
     }
-    .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+    .controls {
+      display: grid; grid-template-columns: 1fr 128px; align-items: center;
+      gap: 10px 10px; margin-top: 12px; font-size: 13px;
+    }
+    .controls label { white-space: nowrap; }
     label.toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    label.toggle input { margin: 0; }
+    .controls .field {
+      justify-self: stretch; text-align: center;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
     .save {
       width: 100%;
       margin-top: 12px;
@@ -58,24 +94,19 @@
       box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 0 #a85f00;
     }
     .save:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.5); }
-    .link {
-      margin-left: auto;
-      background: none; border: 0; padding: 0;
-      color: var(--muted); text-decoration: underline; cursor: pointer; font: inherit; font-size: 12.5px;
-    }
     #status { min-height: 1.4em; margin-top: 8px; font-size: 12.5px; }
     #status.ok { color: var(--ok); }
     #status.err { color: var(--error); white-space: pre-line; }
     #next { margin-top: 8px; font-size: 12.5px; color: var(--muted); }
     #next b { color: var(--text); font-weight: 600; }
-    #hotkey { font-size: 12.5px; color: var(--muted); }
-    #hotkeyField {
-      margin-left: auto; min-width: 110px; padding: 4px 8px;
+    .field {
+      padding: 4px 6px;
       border: 1px solid #3c3c3c; border-radius: 4px;
       background: var(--panel); color: var(--text);
-      font: 600 13px/1.2 "Segoe UI", system-ui, sans-serif; cursor: pointer;
+      font: 13px/1.2 "Segoe UI", system-ui, sans-serif; cursor: pointer;
     }
-    #hotkeyField:hover { background: #454545; }
+    .field:hover { background: #454545; }
+    #hotkeyField { font-weight: 600; }
     #hotkeyField.recording { border-color: var(--btn-top); color: var(--btn-top); font-weight: 400; }
     .count { display: flex; align-items: center; gap: 6px; margin: 10px 0 8px; }
     .count label { margin-right: 2px; }
@@ -108,21 +139,21 @@
 
 <p class="hint">Одна строка — одно нажатие «Сгенерировать», строки идут по порядку. Числа через пробел или запятую. Если в строке чисел меньше, чем генерируется, подменятся только первые, остальные останутся настоящими.</p>
 
-<textarea id="seq" spellcheck="false" aria-label="Последовательности"></textarea>
-
-<div class="row">
-  <label class="toggle"><input type="checkbox" id="loop"> Повторять по кругу</label>
-  <button class="link" id="reset" type="button">Начать с первой строки</button>
+<div class="editor">
+  <div class="gutter" aria-hidden="true"><div id="gutterLines"></div></div>
+  <textarea id="seq" spellcheck="false" wrap="off" aria-label="Последовательности"></textarea>
 </div>
-<div class="row" id="hotkey">
+
+<div class="controls">
+  <label class="toggle"><input type="checkbox" id="loop"> Повторять по кругу</label>
+  <button class="field" id="reset" type="button" title="Следующим нажатием будет первая строка">С первой строки</button>
   <label for="hotkeyField">Вкл/выкл подмены:</label>
-  <button type="button" id="hotkeyField" title="Нажмите, затем введите своё сочетание">—</button>
+  <button type="button" class="field" id="hotkeyField" title="Нажмите, затем введите своё сочетание">—</button>
 </div>
 
 <button class="save" id="save" type="button">Сохранить</button>
 <div id="status" role="status"></div>
 <div id="next"></div>
-
 <script src="shared.js"></script>
 <script src="popup.js"></script>
 </body>
