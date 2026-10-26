@@ -10,6 +10,7 @@ const $reset = document.getElementById('reset');
 const $status = document.getElementById('status');
 const $next = document.getElementById('next');
 const $gutter = document.getElementById('gutterLines');
+const $hints = document.getElementById('hints');
 
 let saved = { text: '', count: RS_DEFAULTS.count };
 let currentIndex = 0;
@@ -17,6 +18,8 @@ let loop = RS_DEFAULTS.loop;
 let hotkey = rsDefaultHotkey();
 let recording = false;
 let siteLimits = null;
+let siteCount = null;
+let errorLines = [];
 let curLine = -1; // строка поля, числа из которой сейчас на сайте
 
 function setStatus(text, kind) {
@@ -41,15 +44,46 @@ function renderGutter() {
   // Пока список правят и не сохранили, подсветка указывала бы не туда — убираем
   const hl = $seq.value === saved.text ? curLine : -1;
   let html = '';
-  for (let i = 0; i < count; i++) html += `<div${i === hl ? ' class="cur"' : ''}>${i + 1}</div>`;
+  for (let i = 0; i < count; i++) {
+    const cls = errorLines.includes(i) ? 'err' : i === hl ? 'cur' : '';
+    html += `<div${cls ? ` class="${cls}"` : ''}>${i + 1}</div>`;
+  }
   $gutter.innerHTML = html;
   syncGutterScroll();
 }
 function syncGutterScroll() {
   $gutter.style.transform = `translateY(${-$seq.scrollTop}px)`;
 }
-$seq.addEventListener('input', renderGutter);
+
+// Проверка на лету, до «Сохранить»
+function liveCheck() {
+  const count = rsClampCount($count.value);
+  // При одном числе строку из нескольких чисел разнесём при сохранении — это не ошибка
+  const { errors, errorLines: lines } = rsParseSequences($seq.value, count === 1 ? Infinity : count);
+  errorLines = lines;
+  renderGutter();
+  renderHints();
+  if (errors.length) setStatus(errors.join('\n'), 'err');
+  else if ($seq.value !== saved.text || count !== saved.count) setStatus('Не забудьте сохранить', '');
+  else if ($status.className === 'err') setStatus('', '');
+}
+let liveTimer = 0;
+$seq.addEventListener('input', () => {
+  renderGutter();
+  clearTimeout(liveTimer);
+  liveTimer = setTimeout(liveCheck, 300);
+});
 $seq.addEventListener('scroll', syncGutterScroll);
+// Столбец номеров сам не прокручивается — передаём колёсико и клик полю
+const $gutterBox = $gutter.parentElement;
+$gutterBox.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  $seq.scrollTop += e.deltaY;
+}, { passive: false });
+$gutterBox.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  $seq.focus();
+});
 
 function renderNext() {
   const { sequences, lines } = rsParseSequences(saved.text, saved.count);
@@ -58,7 +92,7 @@ function renderNext() {
   curLine = currentIndex > 0 && sequences.length && !listOver
       ? lines[(currentIndex - 1) % sequences.length] : -1;
   if (!sequences.length) {
-    $next.textContent = `Список пуст — ползунок встанет на ${saved.count}, числа будут настоящими.`;
+    $next.textContent = 'Список пуст — числа будут настоящими.';
     return renderGutter();
   }
   if (!loop && currentIndex >= sequences.length) {
@@ -68,10 +102,12 @@ function renderNext() {
   const i = currentIndex % sequences.length;
   const nextLine = lines[i];
   renderGutter();
-  const seq = sequences[i];
+  // Чисел выпадет столько, сколько выбрано на сайте, как и в content.js
+  const count = siteCount || saved.count;
+  const seq = sequences[i].slice(0, count);
   const b = document.createElement('b');
-  const rest = saved.count - seq.length;
-  const shown = seq.map(v => (rsViolation(v, siteLimits) ? '?' : v));
+  const rest = count - seq.length;
+  const shown = rsApplyLimits(seq, siteLimits).map(v => v ?? '?');
   b.textContent = shown.join(' ') + (rest > 0 ? ' ' + Array(rest).fill('?').join(' ') : '');
   $next.append('Следующим нажатием: ', b, ` (строка ${nextLine + 1})`);
 }
@@ -84,10 +120,34 @@ chrome.storage.local.get(RS_DEFAULTS, (s) => {
   loop = $loop.checked = s.loop;
   hotkey = s.hotkey || rsDefaultHotkey();
   siteLimits = s.siteLimits || null;
+  siteCount = s.siteCount || null;
   $hotkeyField.textContent = rsHotkeyLabel(hotkey);
   syncCountWord();
   renderNext();
+  renderHints();
 });
+
+// Подсказки о настройках сайта, которые меняют результат
+function renderHints() {
+  const hints = [];
+  const n = rsClampCount($count.value);
+  // Количество задаёт сайт
+  if (siteCount && siteCount !== n) {
+    const of = `На сайте выбрана последовательность из ${siteCount} ${plural(siteCount, 'числа', 'чисел', 'чисел')}`;
+    hints.push(siteCount > n
+        ? `${of}. Недостающие числа будут случайными.`
+        : `${of}. Лишние числа из строк не подставятся.`);
+  }
+  if (siteLimits && siteLimits.noRepeat) {
+    const { sequences, lines } = rsParseSequences(saved.text, saved.count);
+    const withRepeats = lines.filter((line, i) => new Set(sequences[i]).size < sequences[i].length);
+    if (withRepeats.length) {
+      hints.push(`На сайте исключены повторения. Повторы в ${withRepeats.length > 1 ? 'строках' : 'строке'} ` +
+          `${withRepeats.map(l => l + 1).join(', ')} будут случайными числами.`);
+    }
+  }
+  $hints.textContent = hints.join('\n');
+}
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
@@ -95,8 +155,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
     setStatus(changes.enabled.newValue ? 'Подмена включена' : 'Подмена выключена — сайт работает как обычно', 'ok');
   }
   if (changes.siteLimits) siteLimits = changes.siteLimits.newValue || null;
+  if (changes.siteCount) siteCount = changes.siteCount.newValue || null;
+  if (changes.siteLimits || changes.siteCount) renderHints();
   if (changes.index) currentIndex = changes.index.newValue || 0;
-  if (changes.index || changes.siteLimits) renderNext();
+  if (changes.index || changes.siteLimits || changes.siteCount) renderNext();
 });
 
 function stopRecording() {
@@ -132,22 +194,26 @@ document.addEventListener('keydown', (e) => {
 function stepCount(delta) {
   $count.value = rsClampCount(($count.value || saved.count) * 1 + delta);
   syncCountWord();
-  setStatus('Не забудьте сохранить', '');
+  liveCheck();
 }
 $minus.addEventListener('click', () => stepCount(-1));
 $plus.addEventListener('click', () => stepCount(+1));
-$count.addEventListener('input', () => { syncCountWord(); setStatus('Не забудьте сохранить', ''); });
+$count.addEventListener('input', () => { syncCountWord(); liveCheck(); });
 $count.addEventListener('blur', () => { $count.value = rsClampCount($count.value); syncCountWord(); });
 
 $save.addEventListener('click', () => {
   const count = rsClampCount($count.value);
   $count.value = count;
-  const text = $seq.value;
-  const { sequences, errors } = rsParseSequences(text, count);
+  let text = $seq.value;
+  if (count === 1) text = $seq.value = rsSplitSingle(text);
+  const { sequences, errors, errorLines: lines } = rsParseSequences(text, count);
   if (errors.length) {
+    errorLines = lines;
+    renderGutter();
     setStatus(errors.join('\n'), 'err');
     return;
   }
+  errorLines = [];
   const patch = { sequencesText: text, count };
   if (text !== saved.text) patch.index = 0; // новый список — начинаем с первой строки
   chrome.storage.local.set(patch, () => {
@@ -159,6 +225,7 @@ $save.addEventListener('click', () => {
         'ok'
     );
     renderNext();
+    renderHints();
   });
 });
 

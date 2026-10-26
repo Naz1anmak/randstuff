@@ -25,36 +25,20 @@
     if (changes.enabled && !changes.enabled.newValue) armed = null;
   });
 
-  function moveSlider(count) {
-    const slider = document.getElementById('slider');
-    if (!slider) {
-      console.warn(TAG, '#slider не найден');
-      return false;
-    }
-    const min = Number(slider.dataset.min ?? 1);
-    const max = Number(slider.dataset.max ?? RS_MAX_COUNT);
-    const target = Math.min(max, Math.max(min, count));
-
-    const rect = slider.getBoundingClientRect();
-    if (!rect.width) {
-      console.warn(TAG, 'у ползунка нулевая ширина (скрыт?)');
-      return false;
-    }
-    const ratio = max === min ? 0 : (target - min) / (max - min);
-    const x = rect.left + ratio * rect.width;
-    const y = rect.top + rect.height / 2;
-
-    const base = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, button: 0 };
-    slider.dispatchEvent(new MouseEvent('mousedown', { ...base, buttons: 1 }));
-    document.dispatchEvent(new MouseEvent('mouseup', { ...base, buttons: 0 }));
-
-    // Проверка: сайт пишет «5 случайных чисел» в #slider-val
-    const label = document.getElementById('slider-val');
-    const shown = label ? parseInt(label.textContent, 10) : NaN;
-    if (label && shown !== target) {
-      console.warn(TAG, `ползунок: хотели ${target}, на странице ${label.textContent.trim()}`);
-    }
-    return true;
+  // Количество чисел задаёт ползунок сайта; попапу отдаём его для подсказки
+  const siteCount = () => parseInt((document.getElementById('slider-val') || {}).textContent, 10) || null;
+  let lastSiteCount;
+  function publishSiteCount() {
+    const n = siteCount();
+    if (n === lastSiteCount) return;
+    lastSiteCount = n;
+    chrome.storage.local.set({ siteCount: n });
+    publishLimits(); // «исключить повторения» видна только при 2+ числах
+  }
+  const sliderLabel = document.getElementById('slider-val');
+  if (sliderLabel) {
+    new MutationObserver(publishSiteCount)
+        .observe(sliderLabel, { childList: true, characterData: true, subtree: true });
   }
 
   function collectNumbers(root) {
@@ -96,12 +80,14 @@
     const val = id => (document.getElementById(id) || {}).value || '';
     const excludeBox = document.querySelector('#number-exclude input[type=checkbox]');
     const exclude = excludeBox && excludeBox.checked ? rsParseInts(val('number-exclude-list')) : [];
+    const repeatBox = document.querySelector('input[aria-label="исключить повторения"]');
+    const noRepeat = !!(repeatBox && repeatBox.checked && repeatBox.offsetParent);
     const listMode = document.querySelector('input[name=from][value=list]');
-    if (listMode && listMode.checked) return { mode: 'list', list: rsParseInts(val('number-list')), exclude };
+    if (listMode && listMode.checked) return { mode: 'list', list: rsParseInts(val('number-list')), exclude, noRepeat };
     const [min] = rsParseInts(val('number-start'));
     const [max] = rsParseInts(val('number-end'));
-    if (min === undefined || max === undefined || min > max) return { mode: 'any', exclude };
-    return { mode: 'range', min, max, exclude };
+    if (min === undefined || max === undefined || min > max) return { mode: 'any', exclude, noRepeat };
+    return { mode: 'range', min, max, exclude, noRepeat };
   }
 
   let lastLimits = '';
@@ -111,7 +97,7 @@
     lastLimits = json;
     chrome.storage.local.set({ siteLimits: JSON.parse(json) });
   }
-  publishLimits();
+  publishSiteCount(); // заодно публикует и ограничения
   document.addEventListener('input', publishLimits, true);
   document.addEventListener('change', publishLimits, true);
 
@@ -155,35 +141,36 @@
     if (!btn) return;
     armed = null;
     if (!state.enabled) return; // сайт работает как обычно
-
-    // Ползунок ставим всегда (даже при пустом списке — тогда числа будут настоящими)
-    moveSlider(state.count);
+    const count = siteCount() || state.count;
 
     if (!sequences.length) {
-      console.log(TAG, `ползунок → ${state.count}, подмены нет (список пуст)`);
+      console.log(TAG, 'подмены нет (список пуст)');
       return;
     }
 
     if (!state.loop && (state.index || 0) >= sequences.length) {
       // index > длины списка — знак для попапа, что на сайте уже настоящее число
       if (state.index === sequences.length) chrome.storage.local.set({ index: state.index + 1 });
-      console.log(TAG, `ползунок → ${state.count}, список закончился — числа настоящие`);
+      console.log(TAG, 'список закончился — числа настоящие');
       return;
     }
 
     const idx = (state.index || 0) % sequences.length;
     const limits = readLimits();
-    const seq = sequences[idx].map(v => (rsViolation(v, limits) ? null : v));
+    // Чисел в строке больше, чем выбрано на сайте, — лишние не подставляем
+    const seq = rsApplyLimits(sequences[idx].slice(0, count), limits);
     state.index = (state.index || 0) + 1;
     chrome.storage.local.set({ index: state.index });
 
-    armed = { seq, count: state.count, until: Date.now() + 20000 };
+    armed = { seq, count, until: Date.now() + 20000 };
     requestAnimationFrame(apply);
 
-    console.log(TAG, `ползунок → ${state.count}, последовательность #${idx + 1}:`, seq.map(v => v ?? '?').join(' '));
-    sequences[idx].forEach((v) => {
-      const why = rsViolation(v, limits);
-      if (why) console.warn(TAG, `${v} ${why} — оставлено настоящее число`);
+    console.log(TAG, `чисел: ${count}, последовательность #${idx + 1}:`, seq.map(v => v ?? '?').join(' '));
+    seq.forEach((v, i) => {
+      if (v !== null) return;
+      v = sequences[idx][i];
+      const why = rsViolation(v, limits) || 'повторяется, а повторения исключены';
+      console.warn(TAG, `${v} ${why} — оставлено настоящее число`);
     });
   }, true);
 

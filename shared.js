@@ -5,7 +5,8 @@ const RS_DEFAULTS = {
   sequencesText: '1 2 3 4 5\n2 3 4 4 5',
   index: 0,
   hotkey: null, // null — по умолчанию для текущей ОС
-  siteLimits: null
+  siteLimits: null,
+  siteCount: null
 };
 
 const RS_MIN_COUNT = 1;
@@ -21,6 +22,7 @@ function rsParseSequences(text, count) {
   const sequences = [];
   const lines = [];
   const errors = [];
+  const errorLines = [];
   (text || '').split(/\r?\n/).forEach((rawLine, i) => {
     const line = rawLine.trim();
     if (!line) return; // пустые строки пропускаем
@@ -28,16 +30,26 @@ function rsParseSequences(text, count) {
     const bad = tokens.filter(t => !/^-?\d+$/.test(t));
     if (bad.length) {
       errors.push(`Строка ${i + 1}: «${bad.join(' ')}» — не целое число`);
+      errorLines.push(i);
       return;
     }
     if (tokens.length > count) {
       errors.push(`Строка ${i + 1}: ${tokens.length} чисел, а генерируется ${count}`);
+      errorLines.push(i);
       return;
     }
     sequences.push(tokens.map(Number));
     lines.push(i);
   });
-  return { sequences, lines, errors };
+  return { sequences, lines, errors, errorLines };
+}
+
+// При одном числе строка «1,2,3» — это список: разносим по строкам
+function rsSplitSingle(text) {
+  return text.split(/\r?\n/).flatMap((line) => {
+    const tokens = line.trim().split(/[\s,;]+/).filter(Boolean);
+    return tokens.length > 1 && tokens.every(t => /^-?\d+$/.test(t)) ? tokens : [line];
+  }).join('\n');
 }
 
 function rsParseInts(text) {
@@ -61,6 +73,17 @@ function rsDefaultHotkey() {
   return RS_IS_MAC
       ? { code: 'KeyY', ctrl: false, alt: false, shift: true, meta: true }
       : { code: 'KeyY', ctrl: true, alt: false, shift: true, meta: false };
+}
+
+// Числа строки после проверки ограничений; null — сайт так выдать не может, будет настоящее
+function rsApplyLimits(seq, limits) {
+  const seen = new Set();
+  return seq.map((v) => {
+    if (rsViolation(v, limits)) return null;
+    if (limits && limits.noRepeat && seen.has(v)) return null; // «исключить повторения»
+    seen.add(v);
+    return v;
+  });
 }
 
 // code — физическая клавиша (KeyY), поэтому сочетание работает и в русской раскладке
