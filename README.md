@@ -13,8 +13,12 @@
 
 ## 🚀 Установка
 
-1. Скачайте `randstuff.zip` из [последнего релиза](https://github.com/Naz1anmak/randstuff/releases/latest) и распакуйте его.
-   Или склонируйте репозиторий: `git clone https://github.com/Naz1anmak/randstuff.git`
+1. Скачайте `randstuff.zip` из [последнего релиза](https://github.com/Naz1anmak/randstuff/releases/latest) и распакуйте его. Или склонируйте репозиторий:
+
+   ```bash
+   git clone https://github.com/Naz1anmak/randstuff.git
+   ```
+
 2. Откройте страницу расширений: `chrome://extensions` в Chrome или `browser://extensions` в Яндекс Браузере.
 3. Включите **Режим разработчика** (Developer mode).
 4. Нажмите **Загрузить распакованное расширение** (Load unpacked) и выберите папку с расширением.
