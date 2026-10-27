@@ -74,11 +74,14 @@ $seq.addEventListener('input', () => {
   liveTimer = setTimeout(liveCheck, 300);
 });
 $seq.addEventListener('scroll', syncGutterScroll);
-// Столбец номеров сам не прокручивается — передаём колёсико и клик полю
+// Колёсико крутим сами: столбец номеров не прокручивается, а в попапе Яндекса
+// поле в фокусе не листается тачпадом
 const $gutterBox = $gutter.parentElement;
-$gutterBox.addEventListener('wheel', (e) => {
+$gutterBox.parentElement.addEventListener('wheel', (e) => {
   e.preventDefault();
-  $seq.scrollTop += e.deltaY;
+  const k = e.deltaMode === 1 ? 24 : 1; // deltaMode 1 — в строках
+  $seq.scrollTop += e.deltaY * k;
+  $seq.scrollLeft += e.deltaX * k;
 }, { passive: false });
 $gutterBox.addEventListener('mousedown', (e) => {
   e.preventDefault();

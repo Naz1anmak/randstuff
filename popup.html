@@ -53,8 +53,8 @@
     #gutterLines .err { color: var(--error); font-weight: 700; }
     textarea {
       flex: 1; min-width: 0;
-      min-height: 140px;
-      resize: vertical;
+      height: 160px; /* без ручки растягивания: она укорачивала полосу прокрутки */
+      resize: none;
       padding: 8px 10px;
       border: 0;
       border-radius: 0 4px 4px 0;
@@ -68,7 +68,7 @@
     textarea::-webkit-scrollbar-track { background: var(--panel); border-radius: 0 4px 4px 0; }
     textarea::-webkit-scrollbar-thumb { background: #6e6e6e; border-radius: 5px; border: 2px solid var(--panel); }
     textarea::-webkit-scrollbar-thumb:hover { background: #858585; }
-    textarea::-webkit-scrollbar-corner, textarea::-webkit-resizer { background: var(--panel); }
+    textarea::-webkit-scrollbar-corner { background: var(--panel); }
     button:focus-visible, input:focus-visible {
       outline: 2px solid var(--btn-top);
       outline-offset: 2px;
