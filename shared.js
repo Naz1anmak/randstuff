@@ -67,6 +67,21 @@ function rsViolation(v, limits) {
   return v < limits.min || v > limits.max ? `вне диапазона ${limits.min}–${limits.max}` : '';
 }
 
+// Случайное число, которое сайт мог бы выдать и которого ещё нет в used
+function rsPickFree(limits, used) {
+  const ok = v => !used.has(v) && !limits.exclude.includes(v);
+  if (limits.mode === 'list') {
+    const pool = limits.list.filter(ok);
+    return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+  }
+  if (limits.mode !== 'range') return null;
+  for (let k = 0; k < 1000; k++) {
+    const v = limits.min + Math.floor(Math.random() * (limits.max - limits.min + 1));
+    if (ok(v)) return v;
+  }
+  return null;
+}
+
 const RS_IS_MAC = /mac/i.test(navigator.userAgentData?.platform || navigator.platform || '');
 
 function rsDefaultHotkey() {

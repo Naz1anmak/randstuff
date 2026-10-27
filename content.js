@@ -101,7 +101,7 @@
   document.addEventListener('input', publishLimits, true);
   document.addEventListener('change', publishLimits, true);
 
-  let armed = null; // { seq, count, until }; null в seq — число не подменяем
+  let armed = null; // { seq, count, limits, until }; null в seq — число не подменяем
 
   function apply() {
     if (!armed) return;
@@ -119,6 +119,24 @@
       if (armed.seq[i] === null) continue;
       const want = String(armed.seq[i]);
       if (ours[i].text !== want) writeNumber(info, ours[i], want);
+    }
+    if (armed.limits && armed.limits.noRepeat) fixRepeats(box);
+  }
+
+  // Настоящее число сайта может совпасть с подставленным — меняем его на свободное
+  function fixRepeats(box) {
+    const info = collectNumbers(box);
+    const offset = Math.max(0, info.matches.length - armed.count);
+    const all = info.matches.slice(offset, offset + armed.count);
+    const mine = new Set(armed.seq.filter(v => v !== null));
+    const used = new Set(all.map(m => Number(m.text)));
+    for (let i = all.length - 1; i >= 0; i--) {
+      if (i < armed.seq.length && armed.seq[i] !== null) continue;
+      if (!mine.has(Number(all[i].text))) continue;
+      const v = rsPickFree(armed.limits, used);
+      if (v === null) continue;
+      used.add(v);
+      writeNumber(info, all[i], String(v));
     }
   }
 
@@ -162,7 +180,7 @@
     state.index = (state.index || 0) + 1;
     chrome.storage.local.set({ index: state.index });
 
-    armed = { seq, count, until: Date.now() + 20000 };
+    armed = { seq, count, limits, until: Date.now() + 20000 };
     requestAnimationFrame(apply);
 
     console.log(TAG, `чисел: ${count}, последовательность #${idx + 1}:`, seq.map(v => v ?? '?').join(' '));
