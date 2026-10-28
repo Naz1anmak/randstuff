@@ -84,10 +84,11 @@
     const noRepeat = !!(repeatBox && repeatBox.checked && repeatBox.offsetParent);
     const listMode = document.querySelector('input[name=from][value=list]');
     if (listMode && listMode.checked) return { mode: 'list', list: rsParseInts(val('number-list')), exclude, noRepeat };
-    const [min] = rsParseInts(val('number-start'));
-    const [max] = rsParseInts(val('number-end'));
-    if (min === undefined || max === undefined || min > max) return { mode: 'any', exclude, noRepeat };
-    return { mode: 'range', min, max, exclude, noRepeat };
+    const [from] = rsParseInts(val('number-start'));
+    const [to] = rsParseInts(val('number-end'));
+    if (from === undefined || to === undefined) return { mode: 'any', exclude, noRepeat };
+    // «от 100 до 1» сайт понимает как 1–100
+    return { mode: 'range', min: Math.min(from, to), max: Math.max(from, to), exclude, noRepeat };
   }
 
   let lastLimits = '';
