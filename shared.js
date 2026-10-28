@@ -18,6 +18,8 @@ function rsClampCount(n) {
   return Math.min(RS_MAX_COUNT, Math.max(RS_MIN_COUNT, n));
 }
 
+const RS_TOKEN = /^(-?\d+|\?)$/;
+
 function rsParseSequences(text, count) {
   const sequences = [];
   const lines = [];
@@ -27,9 +29,9 @@ function rsParseSequences(text, count) {
     const line = rawLine.trim();
     if (!line) return; // пустые строки пропускаем
     const tokens = line.split(/[\s,;]+/).filter(Boolean);
-    const bad = tokens.filter(t => !/^-?\d+$/.test(t));
+    const bad = tokens.filter(t => !RS_TOKEN.test(t));
     if (bad.length) {
-      errors.push(`Строка ${i + 1}: «${bad.join(' ')}» — не целое число`);
+      errors.push(`Строка ${i + 1}: «${bad.join(' ')}» — не целое число и не ?`);
       errorLines.push(i);
       return;
     }
@@ -38,7 +40,7 @@ function rsParseSequences(text, count) {
       errorLines.push(i);
       return;
     }
-    sequences.push(tokens.map(Number));
+    sequences.push(tokens.map(t => t === '?' ? null : Number(t))); // null — настоящее число сайта
     lines.push(i);
   });
   return { sequences, lines, errors, errorLines };
@@ -48,7 +50,7 @@ function rsParseSequences(text, count) {
 function rsSplitSingle(text) {
   return text.split(/\r?\n/).flatMap((line) => {
     const tokens = line.trim().split(/[\s,;]+/).filter(Boolean);
-    return tokens.length > 1 && tokens.every(t => /^-?\d+$/.test(t)) ? tokens : [line];
+    return tokens.length > 1 && tokens.every(t => RS_TOKEN.test(t)) ? tokens : [line];
   }).join('\n');
 }
 
@@ -94,7 +96,7 @@ function rsDefaultHotkey() {
 function rsApplyLimits(seq, limits) {
   const seen = new Set();
   return seq.map((v) => {
-    if (rsViolation(v, limits)) return null;
+    if (v === null || rsViolation(v, limits)) return null;
     if (limits && limits.noRepeat && seen.has(v)) return null; // «исключить повторения»
     seen.add(v);
     return v;

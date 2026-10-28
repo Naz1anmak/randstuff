@@ -143,7 +143,10 @@ function renderHints() {
   }
   if (siteLimits && siteLimits.noRepeat) {
     const { sequences, lines } = rsParseSequences(saved.text, saved.count);
-    const withRepeats = lines.filter((line, i) => new Set(sequences[i]).size < sequences[i].length);
+    const withRepeats = lines.filter((line, i) => {
+      const nums = sequences[i].filter(v => v !== null);
+      return new Set(nums).size < nums.length;
+    });
     if (withRepeats.length) {
       hints.push(`На сайте исключены повторения. Повторы в ${withRepeats.length > 1 ? 'строках' : 'строке'} ` +
           `${withRepeats.map(l => l + 1).join(', ')} будут случайными числами.`);

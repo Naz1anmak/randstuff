@@ -188,10 +188,10 @@
 
     console.log(TAG, `чисел: ${count}, последовательность #${idx + 1}:`, seq.map(v => v ?? '?').join(' '));
     seq.forEach((v, i) => {
-      if (v !== null) return;
-      v = sequences[idx][i];
-      const why = rsViolation(v, limits) || 'повторяется, а повторения исключены';
-      console.warn(TAG, `${v} ${why} — оставлено настоящее число`);
+      const want = sequences[idx][i];
+      if (v !== null || want === null) return; // ? в строке — настоящее число и так
+      const why = rsViolation(want, limits) || 'повторяется, а повторения исключены';
+      console.warn(TAG, `${want} ${why} — оставлено настоящее число`);
     });
   }, true);
 
