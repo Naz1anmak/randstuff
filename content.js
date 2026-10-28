@@ -83,11 +83,13 @@
     const repeatBox = document.querySelector('input[aria-label="исключить повторения"]');
     const noRepeat = !!(repeatBox && repeatBox.checked && repeatBox.offsetParent);
     const listMode = document.querySelector('input[name=from][value=list]');
-    if (listMode && listMode.checked) return { mode: 'list', list: rsParseInts(val('number-list')), exclude, noRepeat };
-    const [from] = rsParseInts(val('number-start'));
-    const [to] = rsParseInts(val('number-end'));
-    if (from === undefined || to === undefined) return { mode: 'any', exclude, noRepeat };
-    // «от 100 до 1» сайт понимает как 1–100
+    // Пустые поля сайт считает нулём, а «от 100 до 1» — диапазоном 1–100
+    if (listMode && listMode.checked) {
+      const list = rsParseInts(val('number-list'));
+      return { mode: 'list', list: list.length ? list : [0], exclude, noRepeat };
+    }
+    const [from = 0] = rsParseInts(val('number-start'));
+    const [to = 0] = rsParseInts(val('number-end'));
     return { mode: 'range', min: Math.min(from, to), max: Math.max(from, to), exclude, noRepeat };
   }
 

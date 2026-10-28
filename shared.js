@@ -56,12 +56,12 @@ function rsParseInts(text) {
   return (String(text || '').match(/-?\d+/g) || []).map(Number);
 }
 
-// limits: { mode: 'range', min, max, exclude } | { mode: 'list', list, exclude } | { mode: 'any', exclude }
+// limits: { mode: 'range', min, max, exclude, noRepeat } | { mode: 'list', list, exclude, noRepeat }
 function rsViolation(v, limits) {
   if (!limits) return '';
   if (limits.exclude.includes(v)) return 'в списке исключений';
   if (limits.mode === 'list') {
-    return limits.list.length && !limits.list.includes(v) ? 'нет в списке сайта' : '';
+    return limits.list.includes(v) ? '' : 'нет в списке сайта';
   }
   if (limits.mode !== 'range') return '';
   return v < limits.min || v > limits.max ? `вне диапазона ${limits.min}–${limits.max}` : '';
